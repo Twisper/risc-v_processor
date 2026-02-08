@@ -1,0 +1,92 @@
+/**
+* @file shifter.sv
+* @brief A universal shifter for RISC-V processors.
+*
+* @author Mikhail Ulyanov, a.k.a Twisper
+* @date Feb 2026
+*
+* @description
+* This file contains Barrel Shifter, which is able to do 5 types of shifting (Logical Left and Right, Arithmetic right, Rotate Left and Right from Zbb Extension).
+* Key advantages:
+* - Universal and fast shifter for 5 types of shifts.
+* - Uses only 575 Multiplexors (checked with yosys).
+* - Is built for doing right shifts, but for left shifts reverses operand and result. 
+*
+* Interface:
+* - Inputs: One N-bit operand, shift distance, type of shift and direction
+* - Outputs: N-bit result of shift
+* 
+* Parameters:
+* - WIDTH: Sets the bit-width of the operand (e.g. 64).
+* - DEPTH: Determines the number of shifting stages (derived as $clog2(WIDTH))
+*/
+
+module shifter
+    #(parameter WIDTH = 64, parameter DEPTH = $clog2(WIDTH))
+    (
+    input   logic [WIDTH-1:0] a, //Operand to shift. 
+    input   logic [DEPTH-1:0] shift, //Shift distance. 
+    input   logic [1:0]       shift_type, //Type of shifting. 00 - logical, 01 - arithmetical, 10 - rotation. 
+    input   logic             shift_direction, //Direction of shift. 0 - left, 1 - right. 
+    output  logic [WIDTH-1:0] y //Result
+);
+
+    logic [DEPTH:0][WIDTH-1:0] temp; //Packed array to store results of each stage of shift. 
+    logic [WIDTH-1:0] concat_1, concat_2; //Temporary variables for left shifts. 
+    genvar i;
+
+    reverse first_reverse (a, concat_1); //If there is left shift, an operand is being reversed.  
+
+    assign temp[0] = shift_direction ? a : concat_1; //Direction bit affects, will be this reversed operand or not
+
+    generate
+
+        for (i = 1; i < DEPTH+1; i = i + 1) begin: stage_loop //Loop for every stage of shift (e.g. for 64 it will be 1, 2, 4, 8, 16, 32)
+
+            localparam int SHAMT = 2**(i-1);
+
+            /*
+            * This ternary operator is needed to choose concatenations properly for logical, arithmetic and rotational shifts for each stage. 
+            * For example, 00 shift type is right logical, 01 is right arithmetic, 10 is right rotation. 11 does not exist, so it is right logical.
+            */
+
+            assign temp[i] = (shift[i-1] == 1'b0) ? temp[i-1] :
+                             (shift_type == 2'b10) ? // ROTATE Right
+                                 { temp[i-1][SHAMT-1:0], temp[i-1][WIDTH-1:SHAMT] } :
+                             (shift_type == 2'b01) ? // ARITHMETIC Right
+                                 { {SHAMT{temp[i-1][WIDTH-1]}}, temp[i-1][WIDTH-1:SHAMT] } :
+                             // LOGICAL Right (Default for 00 and 11)
+                                 { {SHAMT{1'b0}}, temp[i-1][WIDTH-1:SHAMT] };
+        end
+    endgenerate
+
+    reverse second_reverse (temp[DEPTH], concat_2); //If there is left shift, the result is being reversed.  
+
+    assign y = shift_direction ? temp[DEPTH] : concat_2;
+
+endmodule
+
+/**
+ * @brief Helper module for bit reversal.
+ *
+ * @description
+ * Used to convert Left Shift operations into Right Shift operations.
+ * Note: Written using a generate loop because streaming operators {<<{}}
+ * are not fully supported by Icarus Verilog and older Yosys versions.
+ */
+
+module reverse
+    #(parameter WIDTH = 64)
+    (
+    input   logic [WIDTH-1:0] a,
+    output  logic [WIDTH-1:0] y
+);
+
+    genvar i;
+
+    generate
+        for (i = 0; i < WIDTH; i = i + 1) begin: bit_loop
+            assign y[i] = a[WIDTH-i-1];
+        end
+    endgenerate
+endmodule
