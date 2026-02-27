@@ -30,6 +30,7 @@ module shifter
     input   logic [1:0]       shift_op, //Type of shifting. 00 - logical, 01 - arithmetical, 10 - rotation. 
     input   logic             shift_direction, //Direction of shift. 0 - left, 1 - right. 
     input   logic             is_32_bit_mode, //Puts shifter into 32-bit operand mode. 
+    input   logic             unsigned_bit, //Bit for slli.uw instruction. 
     output  logic [WIDTH-1:0] result
 );
 
@@ -94,7 +95,7 @@ module shifter
 
     assign y = shift_direction ? temp[DEPTH] : concat_2; //Preparing final result for extension if it is 32-bit mode. 
 
-    assign result = is_32_bit_mode ? {{LOWWIDTH{y[LOWWIDTH-1]}}, y[LOWWIDTH-1:0]} : y; //Extending final result with signed bit for 64-bit register. 
+    assign result = is_32_bit_mode ? (unsigned_bit ? {{LOWWIDTH{1'b0}}, y[LOWWIDTH-1:0]} : {{LOWWIDTH{y[LOWWIDTH-1]}}, y[LOWWIDTH-1:0]}) : y; //Extending final result with signed bit or zeros depending on unsigned bit for 64-bit register. 
 
 endmodule
 
