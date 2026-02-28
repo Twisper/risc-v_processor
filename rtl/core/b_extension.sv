@@ -159,3 +159,149 @@ module prior_cyph_8_3
     end
 
 endmodule
+
+/**
+ * @brief Wrapper module for Carry-Less Multiplication. 
+ *
+ * @description
+ * This module chooses right slices from 128-bit result of carry-less multiplication of two 64-bit operands.
+ * Interface:
+ * - Inputs: Two operands, and operation type (00 - clmul, 01 - clmulh, 10 - clmulr). 
+ * - Outputs: 64-bit chosen result of concatenation.
+*/
+
+module clmult_wrapper
+    (
+    input   logic [WIDTH-1:0] operand_a,
+    input   logic [WIDTH-1:0] operand_b,
+    input   logic [1:0]       operation_type,
+    output  logic [WIDTH-1:0] result_o
+);
+
+    logic [2*WIDTH-1:0] clmult_result;
+
+    logic [WIDTH-1:0] final_result;
+
+    clmult_karatsuba main_clmult ( //Calling module for carry-less multiplication.
+                                  .operand_a(operand_a), 
+                                  .operand_b(operand_b), 
+                                  .result_o(clmult_result));
+
+    always_comb begin
+        case (operation_type)
+            2'b00: final_result = clmult_result[WIDTH-1:0];
+            2'b01: final_result = clmult_result[2*WIDTH-1:WIDTH];
+            2'b10: final_result = clmult_result[2*WIDTH-2:WIDTH-1];
+        endcase
+    end
+
+    assign result_o = final_result;
+
+endmodule
+
+/**
+ * @brief Main module for Carry-Less Multiplication with Karatsuba's method.
+ *
+ * @description
+ * This module chooses right slices from given operands using Karatsuba's method, recursively calling itself, until size of operand is 16 bit.
+ * Then is uses matrix carry-less multiplication to reduce critical path. Then it constructs 16-bit product with formula and 128-bit result can be constructed after some layers of recursion with same formula.
+ * The main advantage of this scheme, that it balances between speed and area on crystal, being nearly twice as smaller as 64x64 matrix multiplier and faster than 64x64 Karatsuba multiplier.
+ * Interface:
+ * - Inputs: two N-bit operands. 
+ * - Outputs: 2*N-bit product.
+*/
+
+module clmult_karatsuba
+    #(parameter SIZE = 64)
+    (
+    input   logic [SIZE-1:0] operand_a,
+    input   logic [SIZE-1:0] operand_b,
+    output  logic [2*SIZE-1:0] result_o
+);
+
+    logic [SIZE-1:0] P_HIGH, P_LOW, P_MIDDLE;
+
+    /*
+     * Karatsuba's method uses three results of multiplication of smaller operands
+     * P_l = A_l * B_l, where A_l - lower part of operand A, B_l - lower part of operand B
+     * P_h = A_h * B_h, where A_h - higher part of operand A, B_l - higher part of operand B
+     * P_m = (A_h ^ A_l) * (B_h ^ B_l)
+     * Because of that, the recursion can be used for finding products of slices (i.e. smaller operands), placing same modules on crystal. 
+     * When all of three products are found, result consists of two XOR'ed parts - P_h and P_l concatenated and (P_h ^ P_m ^ P_l) as middle part. 
+     * For example, if the the result is 32 bits, P_l will be 15:0 bits, P_h will be 31:16 bits ({P_h, P_l} is [31:0]), (P_h ^ P_m ^ P_l) will XOR [23:8] bits of concatenated P_h and P_l.
+    */
+
+    if (SIZE > 16) begin : gen_submodules
+        //Calling recursively Karatsuba modules for P_l, P_m, P_h.
+        clmult_karatsuba #(.SIZE(SIZE/2)) recursive_clmult_low (
+                                                                .operand_a(operand_a[SIZE/2-1:0]), 
+                                                                .operand_b(operand_b[SIZE/2-1:0]), 
+                                                                .result_o(P_LOW));
+        clmult_karatsuba #(.SIZE(SIZE/2)) recursive_clmult_middle (
+                                                                .operand_a(operand_a[SIZE-1:SIZE/2] ^ operand_a[SIZE/2-1:0]), 
+                                                                .operand_b(operand_b[SIZE-1:SIZE/2] ^ operand_b[SIZE/2-1:0]), 
+                                                                .result_o(P_MIDDLE));
+        clmult_karatsuba #(.SIZE(SIZE/2)) recursive_clmult_high (
+                                                                .operand_a(operand_a[SIZE-1:SIZE/2]), 
+                                                                .operand_b(operand_b[SIZE-1:SIZE/2]), 
+                                                                .result_o(P_HIGH));
+
+        assign result_o = {P_HIGH, P_LOW} ^ {{(SIZE/2){1'b0}}, (P_MIDDLE ^ P_LOW ^ P_HIGH), {(SIZE/2){1'b0}}}; //Constructing result.
+    end else begin
+        //Calling matrix modules for 16-bit operands. 
+        clmult_matrix #(.SIZE(8)) base_clmult_low (
+                                                    .operand_a(operand_a[7:0]), 
+                                                    .operand_b(operand_b[7:0]), 
+                                                    .result_o(P_LOW));
+        clmult_matrix #(.SIZE(8)) base_clmult_middle (
+                                                    .operand_a(operand_a[15:8] ^ operand_a[7:0]), 
+                                                    .operand_b(operand_b[15:8] ^ operand_b[7:0]), 
+                                                    .result_o(P_MIDDLE));
+        clmult_matrix #(.SIZE(8)) base_clmult_high (
+                                                    .operand_a(operand_a[15:8]), 
+                                                    .operand_b(operand_b[15:8]), 
+                                                    .result_o(P_HIGH));
+
+        assign result_o = {P_HIGH, P_LOW} ^ {8'b0, (P_MIDDLE ^ P_LOW ^ P_HIGH), 8'b0}; //Constructing result.
+    end
+
+endmodule 
+
+/**
+ * @brief Matrix Carry-Less 8x8 multiplicator.
+ *
+ * @description
+ * This module multiplies two 8-bit numbers and returns 16-bit result using matrix method.
+ * Interface:
+ * - Inputs: Two 8-bit operands. 
+ * - Outputs: 16-bit product of multiplication.
+*/
+
+module clmult_matrix
+    #(parameter SIZE = 8)
+    (
+    input   logic [SIZE-1:0] operand_a,
+    input   logic [SIZE-1:0] operand_b,
+    output  logic [2*SIZE-1:0] result_o
+);
+
+    logic [2*SIZE-2:0][SIZE-1:0] temp_results; //Temporary packed array, which stores bits for carry-less sum of each resulting bit.
+    logic [2*SIZE-2:0]      final_result;
+    genvar i,j;
+
+    generate
+        for (i = 0; i < 2*SIZE-1; i = i + 1) begin : bit_loop //Loop for every bit in operands.
+            for (j = 0; j < SIZE; j = j + 1) begin : and_loop //Loop for multiplying every two bits.
+                if (((i < SIZE-1) && (j > i)) || ((i > SIZE-1) && (j < i-SIZE+1))) begin
+                    assign temp_results[i][j] = 1'b0; //If there is nothing to multiply (index out of range), there will be zero.
+                end else begin
+                    assign temp_results[i][j] = operand_a[i-j] & operand_b[j]; //Otherwise, multiplying two digits.
+                end
+            end
+            assign final_result[i] = ^ temp_results[i]; //Finding sum for every resulting bit with XOR operations
+        end
+    endgenerate
+
+    assign result_o = {1'b0, final_result}; //The result of 8x8 carry-less multiplication is 15 bit, concatenating it to 16 bits.
+
+endmodule
