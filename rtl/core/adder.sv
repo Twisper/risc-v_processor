@@ -36,7 +36,7 @@ module adder
 
     logic [DEPTH+1:0][WIDTH:0] g_level, p_level; //Packed arrays for generate (g) and propagate (p) prefix signals at each stage. 
 
-    logic [WIDTH:0] a_carry, b_carry; //Operands with carry bit as first (zero) bit.
+    logic [WIDTH:0] operand_a_carry, operand_b_carry; //Operands with carry bit as first (zero) bit.
 
     generate
         assign operand_a_carry = {operand_a, carry_in}; // Prepending Carry-In as LSB to unify the carry chain logic. 
@@ -68,6 +68,6 @@ module adder
     endgenerate
 
     assign result_o = operand_a ^ operand_b ^ g_level[DEPTH+1][WIDTH-1:0]; //The final result is XOR between operands and carry bitmask.
-    assign carry_out = g_level[DEPTH+1][WIDTH]; //Carry-Out bit is determined by the last bit from carry bitmask.
+    assign carry_out = g_level[DEPTH][WIDTH] | (p_level[DEPTH][WIDTH] & g_level[DEPTH][0]); //Carry-Out bit is determined by the last bit from carry bitmask.
 
 endmodule
