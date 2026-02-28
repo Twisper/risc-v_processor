@@ -30,9 +30,9 @@ import riscv_pkg::*;
 
 module bitcounter
     (
-    input   logic [WIDTH-1:0] a, //Operand
-    input   logic             is_32_bit_mode,
-    output  logic [WIDTH-1:0] y //Result
+    input   logic [WIDTH-1:0] operand_i, //Operand
+    input   logic             is_32_bit_mode_i,
+    output  logic [WIDTH-1:0] result_o //Result
 );
 
     logic                  [WIDTH-1:0] operand;
@@ -40,7 +40,7 @@ module bitcounter
     localparam int HALF = WIDTH/2;
     genvar i, j, k;
 
-    assign operand = is_32_bit_mode ? {{HALF{1'b0}}, a[HALF-1:0]} : a; //If there is cpopw instruction, upper half of operand is zero
+    assign operand = is_32_bit_mode_i ? {{HALF{1'b0}}, operand_i[HALF-1:0]} : operand_i; //If there is cpopw instruction, upper half of operand is zero
 
     assign step_results[0] = operand;
 
@@ -58,7 +58,7 @@ module bitcounter
             end
         end
     endgenerate
-    assign y = {57'b0, step_results[$clog2(WIDTH)][6:0]}; //Extending result to 64 bits.
+    assign result_o = {57'b0, step_results[$clog2(WIDTH)][6:0]}; //Extending result to 64 bits.
 endmodule
 
 /**
@@ -76,10 +76,10 @@ endmodule
 
 module zeroscounter
     (
-    input   logic [WIDTH-1:0] operand,
-    input   logic             oper_type, //0 - ctz, 1 - clz
-    input   logic             is_32_bit_mode, //0 - 64 bit, 1 - 32 bit
-    output  logic [WIDTH-1:0] y
+    input   logic [WIDTH-1:0] operand_i,
+    input   logic             oper_type_i, //0 - ctz, 1 - clz
+    input   logic             is_32_bit_mode_i, //0 - 64 bit, 1 - 32 bit
+    output  logic [WIDTH-1:0] result_o
 );
 
     logic [WIDTH-1:0]           reversed_operand;
@@ -90,26 +90,26 @@ module zeroscounter
     logic [$clog2(WIDTH):0]     result;
     genvar i;
 
-    reverse rev_operation (.a(operand), .y(reversed_operand)); //Reversing operand for clz instruction.
+    reverse rev_operation (.operand_i(operand_i), .result_o(reversed_operand)); //Reversing operand for clz instruction.
 
-    assign a = is_32_bit_mode ? 
-        (oper_type ? 
+    assign a = is_32_bit_mode_i ? 
+        (oper_type_i ? 
             {32'b1, reversed_operand[WIDTH-1:WIDTH/2]} :  //If it is 32-bit mode and clz (clzw), taking upper half of reversed operand as lower half and filling upper half with ones.
-            {32'b1, operand[WIDTH/2-1:0]}) :          //If it is 32-bit mode and ctz (ctzw), taking lower half of unreversed operand and filling upper half with ones.
-        (oper_type ?                    
+            {32'b1, operand_i[WIDTH/2-1:0]}) :          //If it is 32-bit mode and ctz (ctzw), taking lower half of unreversed operand and filling upper half with ones.
+        (oper_typ_i ?                    
             reversed_operand :          //If clz, taking reversed operand. 
-            operand);                   //If ctz, doing nothing.
+            operand_i);                   //If ctz, doing nothing.
 
     generate
         for (i = 0; i < WIDTH / 8; i = i + 1) begin : cyph_loop
-            prior_cyph_8_3 my_cyph (.a(a[i*8+7:i*8]), .y(temp_cyphs[i])); //Generating priority encryptors for each byte.
+            prior_cyph_8_3 my_cyph (.a(a[i*8+7:i*8]), .result_o(temp_cyphs[i])); //Generating priority encryptors for each byte.
             assign valids[i] = | a[i*8+7:i*8]; //Checking whether is at least one "1" bit in byte and storing this value for second step encryptor.
         end
     endgenerate
 
     assign result[$clog2(WIDTH)] = ~| valids; //If there is no "1" bits, most significant bit is one, other ones will be zeros.
 
-    prior_cyph_8_3 upper_res_hals (.a(valids), .y(result[5:3])); //Creating upper half of result with priority encryptor from array, which stores "1" bits in bytes checking.
+    prior_cyph_8_3 upper_res_hals (.a(valids), .result_o(result[5:3])); //Creating upper half of result with priority encryptor from array, which stores "1" bits in bytes checking.
 
     always_comb begin //Final multiplexer, which chooses lower half of result based on upper half.
         case (result[5:3])
@@ -127,7 +127,7 @@ module zeroscounter
 
     assign result[2:0] = lower_half;
 
-    assign y = {57'b0, result}; //Extending 7-bit result to 64 bits. 
+    assign result_o = {57'b0, result}; //Extending 7-bit result to 64 bits. 
 
 endmodule
 
@@ -140,21 +140,21 @@ endmodule
 
 module prior_cyph_8_3
     (
-    input   logic [7:0] a,
-    output  logic [2:0] y
+    input   logic [7:0] operand_i,
+    output  logic [2:0] result_o
 );
 
     always_comb begin
-        casez (a)
-            8'b10000000: y = 7;
-            8'b?1000000: y = 6;
-            8'b??100000: y = 5;
-            8'b???10000: y = 4;
-            8'b????1000: y = 3;
-            8'b?????100: y = 2;
-            8'b??????10: y = 1;
-            8'b???????1: y = 0;
-            default: y = 0;
+        casez (operand_i)
+            8'b10000000: result_o = 7;
+            8'b?1000000: result_o = 6;
+            8'b??100000: result_o = 5;
+            8'b???10000: result_o = 4;
+            8'b????1000: result_o = 3;
+            8'b?????100: result_o = 2;
+            8'b??????10: result_o = 1;
+            8'b???????1: result_o = 0;
+            default: result_o = 0;
         endcase
     end
 
@@ -172,26 +172,26 @@ endmodule
 
 module clmult_wrapper
     (
-    input   logic [WIDTH-1:0] operand_a,
-    input   logic [WIDTH-1:0] operand_b,
-    input   logic [1:0]       operation_type,
+    input   logic [WIDTH-1:0] operand_a_i,
+    input   logic [WIDTH-1:0] operand_b_i,
+    input   logic [1:0]       operation_type_i,
     output  logic [WIDTH-1:0] result_o
 );
 
     logic [2*WIDTH-1:0] clmult_result;
-
     logic [WIDTH-1:0] final_result;
 
     clmult_karatsuba main_clmult ( //Calling module for carry-less multiplication.
-                                  .operand_a(operand_a), 
-                                  .operand_b(operand_b), 
+                                  .operand_a_i(operand_a_i), 
+                                  .operand_b_i(operand_b_i), 
                                   .result_o(clmult_result));
 
     always_comb begin
-        case (operation_type)
+        case (operation_type_i)
             2'b00: final_result = clmult_result[WIDTH-1:0];
             2'b01: final_result = clmult_result[2*WIDTH-1:WIDTH];
             2'b10: final_result = clmult_result[2*WIDTH-2:WIDTH-1];
+            default: final_result = clmult_result[WIDTH-1:0];
         endcase
     end
 
@@ -214,8 +214,8 @@ endmodule
 module clmult_karatsuba
     #(parameter SIZE = 64)
     (
-    input   logic [SIZE-1:0] operand_a,
-    input   logic [SIZE-1:0] operand_b,
+    input   logic [SIZE-1:0] operand_a_i,
+    input   logic [SIZE-1:0] operand_b_i,
     output  logic [2*SIZE-1:0] result_o
 );
 
@@ -234,32 +234,32 @@ module clmult_karatsuba
     if (SIZE > 16) begin : gen_submodules
         //Calling recursively Karatsuba modules for P_l, P_m, P_h.
         clmult_karatsuba #(.SIZE(SIZE/2)) recursive_clmult_low (
-                                                                .operand_a(operand_a[SIZE/2-1:0]), 
-                                                                .operand_b(operand_b[SIZE/2-1:0]), 
+                                                                .operand_a_i(operand_a_i[SIZE/2-1:0]), 
+                                                                .operand_b_i(operand_b_i[SIZE/2-1:0]), 
                                                                 .result_o(P_LOW));
         clmult_karatsuba #(.SIZE(SIZE/2)) recursive_clmult_middle (
-                                                                .operand_a(operand_a[SIZE-1:SIZE/2] ^ operand_a[SIZE/2-1:0]), 
-                                                                .operand_b(operand_b[SIZE-1:SIZE/2] ^ operand_b[SIZE/2-1:0]), 
+                                                                .operand_a_i(operand_a_i[SIZE-1:SIZE/2] ^ operand_a_i[SIZE/2-1:0]), 
+                                                                .operand_b_i(operand_b_i[SIZE-1:SIZE/2] ^ operand_b_i[SIZE/2-1:0]), 
                                                                 .result_o(P_MIDDLE));
         clmult_karatsuba #(.SIZE(SIZE/2)) recursive_clmult_high (
-                                                                .operand_a(operand_a[SIZE-1:SIZE/2]), 
-                                                                .operand_b(operand_b[SIZE-1:SIZE/2]), 
+                                                                .operand_a_i(operand_a_i[SIZE-1:SIZE/2]), 
+                                                                .operand_b_i(operand_b_i[SIZE-1:SIZE/2]), 
                                                                 .result_o(P_HIGH));
 
         assign result_o = {P_HIGH, P_LOW} ^ {{(SIZE/2){1'b0}}, (P_MIDDLE ^ P_LOW ^ P_HIGH), {(SIZE/2){1'b0}}}; //Constructing result.
     end else begin
         //Calling matrix modules for 16-bit operands. 
         clmult_matrix #(.SIZE(8)) base_clmult_low (
-                                                    .operand_a(operand_a[7:0]), 
-                                                    .operand_b(operand_b[7:0]), 
+                                                    .operand_a_i(operand_a_i[7:0]), 
+                                                    .operand_b_i(operand_b_i[7:0]), 
                                                     .result_o(P_LOW));
         clmult_matrix #(.SIZE(8)) base_clmult_middle (
-                                                    .operand_a(operand_a[15:8] ^ operand_a[7:0]), 
-                                                    .operand_b(operand_b[15:8] ^ operand_b[7:0]), 
+                                                    .operand_a_i(operand_a_i[15:8] ^ operand_a_i[7:0]), 
+                                                    .operand_b_i(operand_b_i[15:8] ^ operand_b_i[7:0]), 
                                                     .result_o(P_MIDDLE));
         clmult_matrix #(.SIZE(8)) base_clmult_high (
-                                                    .operand_a(operand_a[15:8]), 
-                                                    .operand_b(operand_b[15:8]), 
+                                                    .operand_a_i(operand_a_i[15:8]), 
+                                                    .operand_b_i(operand_b_i[15:8]), 
                                                     .result_o(P_HIGH));
 
         assign result_o = {P_HIGH, P_LOW} ^ {8'b0, (P_MIDDLE ^ P_LOW ^ P_HIGH), 8'b0}; //Constructing result.
@@ -280,13 +280,13 @@ endmodule
 module clmult_matrix
     #(parameter SIZE = 8)
     (
-    input   logic [SIZE-1:0] operand_a,
-    input   logic [SIZE-1:0] operand_b,
+    input   logic [SIZE-1:0] operand_a_i,
+    input   logic [SIZE-1:0] operand_b_i,
     output  logic [2*SIZE-1:0] result_o
 );
 
     logic [2*SIZE-2:0][SIZE-1:0] temp_results; //Temporary packed array, which stores bits for carry-less sum of each resulting bit.
-    logic [2*SIZE-2:0]      final_result;
+    logic [2*SIZE-2:0]           final_result;
     genvar i,j;
 
     generate
@@ -295,7 +295,7 @@ module clmult_matrix
                 if (((i < SIZE-1) && (j > i)) || ((i > SIZE-1) && (j < i-SIZE+1))) begin
                     assign temp_results[i][j] = 1'b0; //If there is nothing to multiply (index out of range), there will be zero.
                 end else begin
-                    assign temp_results[i][j] = operand_a[i-j] & operand_b[j]; //Otherwise, multiplying two digits.
+                    assign temp_results[i][j] = operand_a_i[i-j] & operand_b_i[j]; //Otherwise, multiplying two digits.
                 end
             end
             assign final_result[i] = ^ temp_results[i]; //Finding sum for every resulting bit with XOR operations
@@ -303,5 +303,55 @@ module clmult_matrix
     endgenerate
 
     assign result_o = {1'b0, final_result}; //The result of 8x8 carry-less multiplication is 15 bit, concatenating it to 16 bits.
+
+endmodule
+
+module xperm8 
+    (
+    input   logic [WIDTH-1:0] operand_a_i,
+    input   logic [WIDTH-1:0] operand_b_i,
+    output  logic [WIDTH-1:0] result_o
+);
+
+    logic [WIDTH/8-1:0][7:0] mask_bits;
+    logic [WIDTH/8-1:0][7:0] vector;
+    logic [WIDTH/8-1:0][7:0] result_bytes;
+    genvar i;
+
+    assign mask_bits = operand_b_i;
+    assign vector = operand_a_i;
+
+    generate
+        for (i = 0; i < WIDTH/8; i = i + 1) begin : byte_mux
+            assign result_bytes[i] = (~| mask_bits[i][7:3]) ? vector[mask_bits[i][2:0]] : 8'b0;
+        end
+    endgenerate
+
+    assign result_o = result_bytes;
+
+endmodule
+
+module xperm4 
+    (
+    input   logic [WIDTH-1:0] operand_a_i,
+    input   logic [WIDTH-1:0] operand_b_i,
+    output  logic [WIDTH-1:0] result_o
+);
+
+    logic [WIDTH/4-1:0][3:0] mask_bits;
+    logic [WIDTH/4-1:0][3:0] vector;
+    logic [WIDTH/4-1:0][3:0] result_bytes;
+    genvar i;
+
+    assign mask_bits = operand_b_i;
+    assign vector = operand_a_i;
+
+    generate
+        for (i = 0; i < WIDTH/4; i = i + 1) begin : byte_mux
+            assign result_bytes[i] = vector[mask_bits[i][3:0]];
+        end
+    endgenerate
+
+    assign result_o = result_bytes;
 
 endmodule

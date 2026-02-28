@@ -27,18 +27,18 @@ import riscv_pkg::*;
 module shifter
     #(parameter DEPTH = $clog2(WIDTH))
     (
-    input   logic [WIDTH-1:0] operand, //Operand to shift. 
-    input   logic [DEPTH-1:0] shamt, //Shift distance. 
-    input   logic [1:0]       shift_op, //Type of shifting. 00 - logical, 01 - arithmetical, 10 - rotation. 
-    input   logic             shift_direction, //Direction of shift. 0 - left, 1 - right. 
-    input   logic             is_32_bit_mode, //Puts shifter into 32-bit operand mode. 
-    input   logic             unsigned_bit, //Bit for slli.uw instruction. 
-    output  logic [WIDTH-1:0] result
+    input   logic [WIDTH-1:0] operand_i, //operand to shift. 
+    input   logic [DEPTH-1:0] shamt_i, //Shift distance. 
+    input   logic [1:0]       shift_op_i, //Type of shifting. 00 - logical, 01 - arithmetical, 10 - rotation. 
+    input   logic             shift_direction_i, //Direction of shift. 0 - left, 1 - right. 
+    input   logic             is_32_bit_mode_i, //Puts shifter into 32-bit operand mode. 
+    input   logic             unsigned_bit_i, //Bit for slli.uw instruction. 
+    output  logic [WIDTH-1:0] result_o
 );
 
     logic [DEPTH:0][WIDTH-1:0] temp; //Packed array to store results of each stage of shift. 
     logic [WIDTH-1:0]          concat_1, concat_2; //Temporary variables for left shifts. 
-    logic [WIDTH-1:0]          a, y; //Variables for temporary input/output.
+    logic [WIDTH-1:0]          new_operand, shift_result; //Variables for temporary input/output.
     logic [DEPTH-1:0]          shift;
     logic [1:0]                shift_type;
     genvar i;
@@ -50,27 +50,27 @@ module shifter
     */
 
     always_comb begin
-        shift_type = shift_op;
-        if (is_32_bit_mode) begin //Checking whether is 32-bit mode. 
-            case (shift_op) //If yes, checking shift operation for higher bit extenion. 
-                2'b00: a = {{LOWWIDTH{1'b0}}, operand[LOWWIDTH-1:0]}; //If it is logical shift, higher bits become zeros. 
-                2'b01: a = {{LOWWIDTH{operand[LOWWIDTH-1]}}, operand[LOWWIDTH-1:0]}; //If it is arithmetic shift, extending higher bits with signed bit. 
+        shift_type = shift_op_i;
+        if (is_32_bit_mode_i) begin //Checking whether is 32-bit mode. 
+            case (shift_op_i) //If yes, checking shift operation for higher bit extenion. 
+                2'b00: new_operand = {{LOWWIDTH{1'b0}}, operand_i[LOWWIDTH-1:0]}; //If it is logical shift, higher bits become zeros. 
+                2'b01: new_operand = {{LOWWIDTH{operand_i[LOWWIDTH-1]}}, operand_i[LOWWIDTH-1:0]}; //If it is arithmetic shift, extending higher bits with signed bit. 
                 2'b10: begin
-                    a = {operand[LOWWIDTH-1:0], operand[LOWWIDTH-1:0]}; //It it is ROR/ROL shift, copying lower 32 bits into higher bits. 
-                    shift_type = shift_direction ? 2'b00 : 2'b10;
+                    new_operand = {operand_i[LOWWIDTH-1:0], operand_i[LOWWIDTH-1:0]}; //It it is ROR/ROL shift, copying lower 32 bits into higher bits. 
+                    shift_type = shift_direction_i ? 2'b00 : 2'b10;
                 end 
-                default: a = {{LOWWIDTH{1'b0}}, operand[LOWWIDTH-1:0]}; //Default case - logical shift. 
+                default: new_operand = {{LOWWIDTH{1'b0}}, operand_i[LOWWIDTH-1:0]}; //Default case - logical shift. 
             endcase
-            shift = {1'b0, shamt[DEPTH-2:0]};
+            shift = {1'b0, shamt_i[DEPTH-2:0]};
         end else begin
-            a = operand; //If it is 64-bit mode, doing nothing. 
-            shift = shamt;
+            new_operand = operand_i; //If it is 64-bit mode, doing nothing. 
+            shift = shamt_i;
         end
     end
 
-    reverse first_reverse (a, concat_1); //If there is left shift, an operand is being reversed.  
+    reverse first_reverse (new_operand, concat_1); //If there is left shift, an operand is being reversed.  
 
-    assign temp[0] = shift_direction ? a : concat_1; //Direction bit affects, will be this reversed operand or not
+    assign temp[0] = shift_direction_i ? new_operand : concat_1; //Direction bit affects, will be this reversed operand or not
 
     generate
 
@@ -95,9 +95,9 @@ module shifter
 
     reverse second_reverse (temp[DEPTH], concat_2); //If there is left shift, the result is being reversed.  
 
-    assign y = shift_direction ? temp[DEPTH] : concat_2; //Preparing final result for extension if it is 32-bit mode. 
+    assign shift_result = shift_direction_i ? temp[DEPTH] : concat_2; //Preparing final result for extension if it is 32-bit mode. 
 
-    assign result = is_32_bit_mode ? (unsigned_bit ? {{LOWWIDTH{1'b0}}, y[LOWWIDTH-1:0]} : {{LOWWIDTH{y[LOWWIDTH-1]}}, y[LOWWIDTH-1:0]}) : y; //Extending final result with signed bit or zeros depending on unsigned bit for 64-bit register. 
+    assign result_o = is_32_bit_mode_i ? (unsigned_bit_i ? {{LOWWIDTH{1'b0}}, shift_result[LOWWIDTH-1:0]} : {{LOWWIDTH{shift_result[LOWWIDTH-1]}}, shift_result[LOWWIDTH-1:0]}) : shift_result; //Extending final result with signed bit or zeros depending on unsigned bit for 64-bit register. 
 
 endmodule
 
@@ -112,15 +112,15 @@ endmodule
 
 module reverse
     (
-    input   logic [WIDTH-1:0] a,
-    output  logic [WIDTH-1:0] y
+    input   logic [WIDTH-1:0] operand_i,
+    output  logic [WIDTH-1:0] result_o
 );
 
     genvar i;
 
     generate
         for (i = 0; i < WIDTH; i = i + 1) begin: bit_loop
-            assign y[i] = a[WIDTH-i-1];
+            assign result_o[i] = operand_i[WIDTH-i-1];
         end
     endgenerate
 endmodule
