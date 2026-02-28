@@ -21,12 +21,14 @@
 * - DEPTH: Determines the number of prefix stages (derived as $clog2(WIDTH))
 */
 
+import riscv_pkg::*;
+
 module adder
-    #(parameter WIDTH = 64, parameter DEPTH = $clog2(WIDTH)) //Parameters for bit-width of the operands and number of prefix stages.
+    #(parameter DEPTH = $clog2(WIDTH)) //Parameters for bit-width of the operands and number of prefix stages.
     (
     input   logic             carry_in, //Carry-In bit for subtractions.
-    input   logic [WIDTH-1:0] a, b, //Two WIDTH-bit operands.
-    output  logic [WIDTH-1:0] y, //Final Sum.
+    input   logic [WIDTH-1:0] operand_a, operand_b, //Two WIDTH-bit operands.
+    output  logic [WIDTH-1:0] result_o, //Final Sum.
     output  logic             carry_out //Indicates unsigned overflow.
 );
 
@@ -37,11 +39,11 @@ module adder
     logic [WIDTH:0] a_carry, b_carry; //Operands with carry bit as first (zero) bit.
 
     generate
-        assign a_carry = {a, carry_in}; // Prepending Carry-In as LSB to unify the carry chain logic. 
-        assign b_carry = {b, carry_in};
+        assign operand_a_carry = {operand_a, carry_in}; // Prepending Carry-In as LSB to unify the carry chain logic. 
+        assign operand_b_carry = {operand_b, carry_in};
 
-        assign g_level[0] = a_carry & b_carry; //Calculating carry generating and propagation ability for every bit of operands (including Carry-In).
-        assign p_level[0] = a_carry ^ b_carry;
+        assign g_level[0] = operand_a_carry & operand_b_carry; //Calculating carry generating and propagation ability for every bit of operands (including Carry-In).
+        assign p_level[0] = operand_a_carry ^ operand_b_carry;
 
         for (i = 1; i < DEPTH+2; i = i + 1) begin: stage_loop //Loop for every prefix stage.
             for (j = 0; j < WIDTH+1; j = j + 1) begin: bit_loop //Loop for every bit in future sum.
@@ -65,7 +67,7 @@ module adder
         end
     endgenerate
 
-    assign y = a ^ b ^ g_level[DEPTH+1][WIDTH-1:0]; //The final result is XOR between operands and carry bitmask.
+    assign result_o = operand_a ^ operand_b ^ g_level[DEPTH+1][WIDTH-1:0]; //The final result is XOR between operands and carry bitmask.
     assign carry_out = g_level[DEPTH+1][WIDTH]; //Carry-Out bit is determined by the last bit from carry bitmask.
 
 endmodule

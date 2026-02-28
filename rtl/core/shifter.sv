@@ -22,8 +22,10 @@
 * - DEPTH: Determines the number of shifting stages (derived as $clog2(WIDTH))
 */
 
+import riscv_pkg::*;
+
 module shifter
-    #(parameter WIDTH = 64, parameter DEPTH = $clog2(WIDTH))
+    #(parameter DEPTH = $clog2(WIDTH))
     (
     input   logic [WIDTH-1:0] operand, //Operand to shift. 
     input   logic [DEPTH-1:0] shamt, //Shift distance. 
@@ -109,7 +111,6 @@ endmodule
  */
 
 module reverse
-    #(parameter WIDTH = 64)
     (
     input   logic [WIDTH-1:0] a,
     output  logic [WIDTH-1:0] y

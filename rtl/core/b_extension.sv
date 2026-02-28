@@ -26,8 +26,9 @@
  * - Outputs: 7-bit result, extended to 64 bits.
 */
 
+import riscv_pkg::*;
+
 module bitcounter
-    #(parameter WIDTH = 64)
     (
     input   logic [WIDTH-1:0] a, //Operand
     input   logic             is_32_bit_mode,
@@ -36,9 +37,10 @@ module bitcounter
 
     logic                  [WIDTH-1:0] operand;
     logic [$clog2(WIDTH):0][WIDTH-1:0] step_results; //Packed array for temporary storing sum of 2**N bits, where N is exact step
+    localparam int HALF = WIDTH/2;
     genvar i, j, k;
 
-    assign operand = is_32_bit_mode ? {HALF{1'b0}, a[HALF-1:0]} : a; //If there is cpopw instruction, upper half of operand is zero
+    assign operand = is_32_bit_mode ? {{HALF{1'b0}}, a[HALF-1:0]} : a; //If there is cpopw instruction, upper half of operand is zero
 
     assign step_results[0] = operand;
 
@@ -73,7 +75,6 @@ endmodule
 */
 
 module zeroscounter
-    #(parameter WIDTH = 64)
     (
     input   logic [WIDTH-1:0] operand,
     input   logic             oper_type, //0 - ctz, 1 - clz
