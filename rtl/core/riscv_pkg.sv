@@ -21,7 +21,7 @@ package riscv_pkg;
         OPCODE_OP_IMM_64 = 7'b0010011
     } opcode_e;
 
-    typedef enum logic [6:0] {
+    typedef enum logic [5:0] { //59
 
         //Arithmetic. 
         ALU_ADD,
@@ -103,6 +103,10 @@ package riscv_pkg;
 
         ALU_ZIP,
         ALU_UNZIP
+
+        ALU_CLMUL,
+        ALU_CLMULH,
+        ALU_CLMULR
 
     } op_alu_e;
 
