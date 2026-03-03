@@ -77,13 +77,13 @@ endmodule
 module zeroscounter
     (
     input   logic [WIDTH-1:0] operand_i,
-    input   logic             oper_type_i, //0 - ctz, 1 - clz
+    input   bitcount_type_e   oper_type_i, //0 - ctz, 1 - clz
     input   logic             is_32_bit_mode_i, //0 - 64 bit, 1 - 32 bit
     output  logic [WIDTH-1:0] result_o
 );
 
     logic [WIDTH-1:0]           reversed_operand;
-    logic [WIDTH-1:0]           a;
+    logic [WIDTH-1:0]           new_operand;
     logic [WIDTH/8 - 1:0]       valids; //An array of OR operation for each byte, each element shows, does at least one bit is "1"
     logic [WIDTH/8-1:0][2:0]    temp_cyphs; //Temporary variable for first step priority encoders. 
     logic [2:0]                 lower_half;
@@ -92,24 +92,24 @@ module zeroscounter
 
     reverse rev_operation (.operand_i(operand_i), .result_o(reversed_operand)); //Reversing operand for clz instruction.
 
-    assign a = is_32_bit_mode_i ? 
-        (oper_type_i ? 
+    assign new_operand = is_32_bit_mode_i ? 
+        ((oper_type_i == BITCOUNT_LEAD) ? 
             {32'b1, reversed_operand[WIDTH-1:WIDTH/2]} :  //If it is 32-bit mode and clz (clzw), taking upper half of reversed operand as lower half and filling upper half with ones.
             {32'b1, operand_i[WIDTH/2-1:0]}) :          //If it is 32-bit mode and ctz (ctzw), taking lower half of unreversed operand and filling upper half with ones.
-        (oper_typ_i ?                    
+        ((oper_type_i == BITCOUNT_LEAD) ?                    
             reversed_operand :          //If clz, taking reversed operand. 
             operand_i);                   //If ctz, doing nothing.
 
     generate
         for (i = 0; i < WIDTH / 8; i = i + 1) begin : cyph_loop
-            prior_cyph_8_3 my_cyph (.a(a[i*8+7:i*8]), .result_o(temp_cyphs[i])); //Generating priority encryptors for each byte.
-            assign valids[i] = | a[i*8+7:i*8]; //Checking whether is at least one "1" bit in byte and storing this value for second step encryptor.
+            prior_cyph_8_3 my_cyph (.operand_i(new_operand[i*8+7:i*8]), .result_o(temp_cyphs[i])); //Generating priority encryptors for each byte.
+            assign valids[i] = | new_operand[i*8+7:i*8]; //Checking whether is at least one "1" bit in byte and storing this value for second step encryptor.
         end
     endgenerate
 
     assign result[$clog2(WIDTH)] = ~| valids; //If there is no "1" bits, most significant bit is one, other ones will be zeros.
 
-    prior_cyph_8_3 upper_res_hals (.a(valids), .result_o(result[5:3])); //Creating upper half of result with priority encryptor from array, which stores "1" bits in bytes checking.
+    prior_cyph_8_3 upper_res_hals (.operand_i(valids), .result_o(result[5:3])); //Creating upper half of result with priority encryptor from array, which stores "1" bits in bytes checking.
 
     always_comb begin //Final multiplexer, which chooses lower half of result based on upper half.
         case (result[5:3])
@@ -169,12 +169,12 @@ endmodule
  * - Inputs: Two operands, and operation type (00 - clmul, 01 - clmulh, 10 - clmulr). 
  * - Outputs: 64-bit chosen result of concatenation.
 */
-
+/*
 module clmult_wrapper
     (
     input   logic [WIDTH-1:0] operand_a_i,
     input   logic [WIDTH-1:0] operand_b_i,
-    input   logic [1:0]       operation_type_i,
+    input   clmult_op_e       operation_type_i,
     output  logic [WIDTH-1:0] result_o
 );
 
@@ -188,16 +188,16 @@ module clmult_wrapper
 
     always_comb begin
         case (operation_type_i)
-            2'b00: final_result = clmult_result[WIDTH-1:0];
-            2'b01: final_result = clmult_result[2*WIDTH-1:WIDTH];
-            2'b10: final_result = clmult_result[2*WIDTH-2:WIDTH-1];
+            CLMULT_CLMUL: final_result = clmult_result[WIDTH-1:0];
+            CLMULT_CLMULH: final_result = clmult_result[2*WIDTH-1:WIDTH];
+            CLMULT_CLMULR: final_result = clmult_result[2*WIDTH-2:WIDTH-1];
             default: final_result = clmult_result[WIDTH-1:0];
         endcase
     end
 
     assign result_o = final_result;
 
-endmodule
+endmodule*/
 
 /**
  * @brief Main module for Carry-Less Multiplication with Karatsuba's method.
@@ -303,55 +303,5 @@ module clmult_matrix
     endgenerate
 
     assign result_o = {1'b0, final_result}; //The result of 8x8 carry-less multiplication is 15 bit, concatenating it to 16 bits.
-
-endmodule
-
-module xperm8 
-    (
-    input   logic [WIDTH-1:0] operand_a_i,
-    input   logic [WIDTH-1:0] operand_b_i,
-    output  logic [WIDTH-1:0] result_o
-);
-
-    logic [WIDTH/8-1:0][7:0] mask_bits;
-    logic [WIDTH/8-1:0][7:0] vector;
-    logic [WIDTH/8-1:0][7:0] result_bytes;
-    genvar i;
-
-    assign mask_bits = operand_b_i;
-    assign vector = operand_a_i;
-
-    generate
-        for (i = 0; i < WIDTH/8; i = i + 1) begin : byte_mux
-            assign result_bytes[i] = (~| mask_bits[i][7:3]) ? vector[mask_bits[i][2:0]] : 8'b0;
-        end
-    endgenerate
-
-    assign result_o = result_bytes;
-
-endmodule
-
-module xperm4 
-    (
-    input   logic [WIDTH-1:0] operand_a_i,
-    input   logic [WIDTH-1:0] operand_b_i,
-    output  logic [WIDTH-1:0] result_o
-);
-
-    logic [WIDTH/4-1:0][3:0] mask_bits;
-    logic [WIDTH/4-1:0][3:0] vector;
-    logic [WIDTH/4-1:0][3:0] result_bytes;
-    genvar i;
-
-    assign mask_bits = operand_b_i;
-    assign vector = operand_a_i;
-
-    generate
-        for (i = 0; i < WIDTH/4; i = i + 1) begin : byte_mux
-            assign result_bytes[i] = vector[mask_bits[i][3:0]];
-        end
-    endgenerate
-
-    assign result_o = result_bytes;
 
 endmodule

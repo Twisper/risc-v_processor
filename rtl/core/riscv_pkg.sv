@@ -25,6 +25,7 @@ package riscv_pkg;
 
         //Arithmetic. 
         ALU_ADD,
+        ALU_ADDUW,
         ALU_SUB,
 
         //Logical. 
@@ -112,5 +113,21 @@ package riscv_pkg;
         ALU_CLMULR
 
     } op_alu_e;
+
+    typedef enum logic [1:0] {
+        SHIFT_LOGICAL,
+        SHIFT_ARITHMETICAL,
+        SHIFT_ROTATE
+    } shift_op_e;
+
+    typedef enum logic {
+        SHIFT_LEFT,
+        SHIFT_RIGHT
+    } shift_dir_e;
+
+    typedef enum logic {
+        BITCOUNT_TRAIL,
+        BITCOUNT_LEAD
+    } bitcount_type_e;
 
 endpackage
