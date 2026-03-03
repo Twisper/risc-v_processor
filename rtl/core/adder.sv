@@ -21,6 +21,7 @@
 * - DEPTH: Determines the number of prefix stages (derived as $clog2(WIDTH))
 */
 
+`default_nettype none
 import riscv_pkg::*;
 
 module adder
@@ -68,6 +69,6 @@ module adder
     endgenerate
 
     assign result_o = operand_a_i ^ operand_b_i ^ g_level[DEPTH+1][WIDTH-1:0]; //The final result is XOR between operands and carry bitmask.
-    assign carry_out_o = g_level[DEPTH][WIDTH] | (p_level[DEPTH][WIDTH] & g_level[DEPTH][0]); //Carry-Out bit is determined by the last bit from carry bitmask.
+    assign carry_out_o = g_level[DEPTH+1][WIDTH]; //Carry-Out bit is determined by the last bit from carry bitmask.
 
 endmodule

@@ -22,6 +22,7 @@
 * - DEPTH: Determines the number of shifting stages (derived as $clog2(WIDTH))
 */
 
+`default_nettype none
 import riscv_pkg::*;
 
 module shifter
@@ -127,5 +128,5 @@ module reverse
             assign result_o[i] = operand_i[SIZE-i-1];
         end
     endgenerate
-    
+
 endmodule

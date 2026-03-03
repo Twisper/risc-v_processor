@@ -26,6 +26,8 @@
  * - Outputs: 7-bit result, extended to 64 bits.
 */
 
+`default_nettype none
+
 import riscv_pkg::*;
 
 module bitcounter

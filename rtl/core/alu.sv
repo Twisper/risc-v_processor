@@ -19,6 +19,7 @@
  * - Flag of operands comparison (shows, if operand a is greater than operand b). 
 */
 
+`default_nettype none
 import riscv_pkg::*;
 
 module alu
@@ -42,10 +43,19 @@ module alu
     logic             uw_operand_a_flag;
     logic             negate_operand_b_flag;
     logic [WIDTH-1:0] extended_operand_a;
+    logic [WIDTH-1:0] negated_operand_b;
     logic [WIDTH-1:0] adder_operand_a;
     logic [WIDTH-1:0] adder_operand_b;
+    logic [WIDTH-1:0] adder_result;
 
     always_comb begin
+
+        negate_operand_b_flag = 1'b0;
+        sh1add_operand_a_flag = 1'b0;
+        sh2add_operand_a_flag = 1'b0;
+        sh3add_operand_a_flag = 1'b0;
+        uw_operand_a_flag = 1'b0;
+
         unique case (operation_type_i)
             ALU_ADDUW,
             ALU_SH1ADDUW,
@@ -65,6 +75,8 @@ module alu
             ALU_SH1ADD, ALU_SH1ADDUW: sh1add_operand_a_flag = 1'b1;
             ALU_SH2ADD, ALU_SH2ADDUW: sh2add_operand_a_flag = 1'b1;
             ALU_SH3ADD, ALU_SH3ADDUW: sh3add_operand_a_flag = 1'b1;
+
+            default:;
         endcase
     end
 
@@ -83,7 +95,7 @@ module alu
     end
 
     //Preparing operand_b
-    assign negated_operand_b = ~ operand_b_i;
+    assign negated_operand_b = {WIDTH{1'b1}} ^ operand_b_i;
     always_comb begin
         unique case (1'b1)
             negate_operand_b_flag: adder_operand_b = negated_operand_b;
@@ -92,7 +104,6 @@ module alu
     end
 
     logic             carry_out;
-    logic [WIDTH-1:0] adder_result;
 
     adder kogge_stone_adder (
                 .carry_in_i(negate_operand_b_flag), 
@@ -112,6 +123,9 @@ module alu
     logic cmp_signed;
     
     always_comb begin
+
+        cmp_signed = 1'b0;
+
         unique case (operation_type_i)
         ALU_LT,
         ALU_GE,
@@ -145,6 +159,8 @@ module alu
             ALU_LT, ALU_LTU,
             ALU_MIN, ALU_MINU,
             ALU_SLT, ALU_SLTU:  cmp_result = ~ is_greater_or_equal;
+
+            default:;
         endcase
     end
 
@@ -194,12 +210,6 @@ module alu
         endcase
 
         unique case (operation_type_i)
-
-            /*ALU_SLL, ALU_SLLW, 
-            ALU_SLLUW,
-            ALU_SRL, ALU_SRLW,
-            ALU_BCLR, ALU_BEXT,
-            ALU_BINV, ALU_BSET: shifter_operation = SHIFT_LOGICAL;*/
 
             ALU_SRA, ALU_SRAW: shifter_operation = SHIFT_ARITHMETICAL;
 
@@ -342,9 +352,9 @@ module alu
 
     always_comb begin
         unique case (operation_type_i)
-            ALU_CLMULH: clmult_result = clmult_result[2*WIDTH-1:WIDTH];
-            ALU_CLMULR: clmult_result = clmult_result[2*WIDTH-2:WIDTH-1];
-            default: clmult_result = clmult_result[WIDTH-1:0];
+            ALU_CLMULH: clmult_result = clmult_wide_result[2*WIDTH-1:WIDTH];
+            ALU_CLMULR: clmult_result = clmult_wide_result[2*WIDTH-2:WIDTH-1];
+            default: clmult_result = clmult_wide_result[WIDTH-1:0]; //clmul
         endcase
     end
 
@@ -426,9 +436,9 @@ module alu
 
     always_comb begin
         unique case (operation_type_i)
-            ALU_PACKH: signextend_result = {{WIDTH-16{1'b0}}, operand_a_i[7:0], operand_a_i[7:0]};
-            ALU_PACKW: signextend_result = {{WIDTH-32{1'b0}}, operand_a_i[15:0], operand_a_i[15:0]};
-            default: signextend_result = {operand_b_i[WIDTH/2-1:0], operand_a_i[WIDTH/2-1:0]}; //pack
+            ALU_PACKH: pack_result = {{WIDTH-16{1'b0}}, operand_b_i[7:0], operand_a_i[7:0]};
+            ALU_PACKW: pack_result = {{WIDTH-32{1'b0}}, operand_b_i[15:0], operand_a_i[15:0]};
+            default: pack_result = {operand_b_i[WIDTH/2-1:0], operand_a_i[WIDTH/2-1:0]}; //pack
         endcase
     end
 
@@ -528,6 +538,8 @@ module alu
             ALU_UNZIP: result_o = unzip_result;
 
             ALU_CLMUL, ALU_CLMULH, ALU_CLMULR: result_o = clmult_result;
+
+            default:;
 
         endcase
     end
