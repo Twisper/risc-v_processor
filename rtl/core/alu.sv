@@ -136,10 +136,11 @@ module alu
         endcase
     end
 
-    assign is_equal_o = ~| adder_result;
+    assign is_equal = ~| adder_result;
+    assign is_equal_o = is_equal;
 
     always_comb begin
-        if (adder_operand_a[WIDTH-1] ^ adder_operand_b[WIDTH-1] == 1'b0) begin
+        if (operand_a_i[WIDTH-1] ^ operand_b_i[WIDTH-1] == 1'b0) begin
             is_greater_or_equal = (adder_result[WIDTH-1] == 1'b0);
         end else begin
             is_greater_or_equal = operand_a_i[WIDTH-1] ^ cmp_signed;
@@ -160,7 +161,7 @@ module alu
             ALU_MIN, ALU_MINU,
             ALU_SLT, ALU_SLTU:  cmp_result = ~ is_greater_or_equal;
 
-            default:;
+            default: cmp_result = 1'b0;
         endcase
     end
 
@@ -488,6 +489,9 @@ module alu
                 ///////////////
 
     always_comb begin
+
+        result_o = 'b0;
+
         unique case (operation_type_i)
 
             ALU_XOR, ALU_XORN,

@@ -40,7 +40,7 @@ module bitcounter
     logic                  [WIDTH-1:0] operand;
     logic [$clog2(WIDTH):0][WIDTH-1:0] step_results; //Packed array for temporary storing sum of 2**N bits, where N is exact step
     localparam int HALF = WIDTH/2;
-    genvar i, j, k;
+    genvar i, j;
 
     assign operand = is_32_bit_mode_i ? {{HALF{1'b0}}, operand_i[HALF-1:0]} : operand_i; //If there is cpopw instruction, upper half of operand is zero
 
